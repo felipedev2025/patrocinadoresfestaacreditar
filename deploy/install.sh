@@ -5,8 +5,9 @@
 set -euo pipefail
 
 REPO_URL="${REPO_URL:-https://github.com/felipedev2025/patrocinadoresfestaacreditar.git}"
-BRANCH="${BRANCH:-main}"
 APP_DIR="${APP_DIR:-/opt/patrocinios}"
+# Com o repositório já clonado, mantém o branch atual; senão usa BRANCH (padrão: main)
+if [ -d "$APP_DIR/.git" ]; then BRANCH="${BRANCH:-$(git -C "$APP_DIR" rev-parse --abbrev-ref HEAD)}"; else BRANCH="${BRANCH:-main}"; fi
 
 [ "$(id -u)" -eq 0 ] || { echo "Execute como root (sudo)."; exit 1; }
 
@@ -26,7 +27,7 @@ fi
 
 echo "==> Código em $APP_DIR"
 if [ -d "$APP_DIR/.git" ]; then
-  git -C "$APP_DIR" fetch origin "$BRANCH" && git -C "$APP_DIR" checkout "$BRANCH" && git -C "$APP_DIR" pull --ff-only origin "$BRANCH"
+  git -C "$APP_DIR" pull --ff-only origin "$BRANCH"
 else
   git clone --branch "$BRANCH" "$REPO_URL" "$APP_DIR"
 fi
