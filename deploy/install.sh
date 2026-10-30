@@ -3,6 +3,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/felipedev2025/patrocinadoresfestaacreditar/main/deploy/install.sh -o install.sh && sudo bash install.sh
 # ou, com o repositório já clonado:  sudo bash deploy/install.sh
 set -euo pipefail
+ADMIN_PASSWORD="${ADMIN_PASSWORD:-}"
 
 REPO_URL="${REPO_URL:-https://github.com/felipedev2025/patrocinadoresfestaacreditar.git}"
 APP_DIR="${APP_DIR:-/opt/patrocinios}"
@@ -34,13 +35,17 @@ fi
 cd "$APP_DIR"
 
 if [ ! -f .env ]; then
-  read -rp "Domínio (ex.: patrocinios.acreditar.org.br): " DOMAIN
-  read -rp "E-mail do administrador (login e avisos do certificado): " ADMIN_EMAIL
-  read -rp "Nome do administrador [Administrador]: " ADMIN_NAME; ADMIN_NAME="${ADMIN_NAME:-Administrador}"
-  while true; do
+  # Valores podem vir por variável de ambiente (modo não interativo, recomendado no terminal web):
+  #   DOMAIN=... ADMIN_EMAIL=... ADMIN_PASSWORD='...' bash deploy/install.sh
+  [ -n "${DOMAIN:-}" ] || read -rp "Domínio (ex.: patrocinios.acreditar.org.br): " DOMAIN
+  [ -n "${ADMIN_EMAIL:-}" ] || read -rp "E-mail do administrador (login e avisos do certificado): " ADMIN_EMAIL
+  [ -n "${ADMIN_NAME:-}" ] || read -rp "Nome do administrador [Administrador]: " ADMIN_NAME
+  ADMIN_NAME="${ADMIN_NAME:-Administrador}"
+  [[ "$DOMAIN" =~ ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}$ ]] || { echo "Domínio inválido: '$DOMAIN'"; exit 1; }
+  [[ "$ADMIN_EMAIL" =~ ^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$ ]] || { echo "E-mail inválido: '$ADMIN_EMAIL'"; exit 1; }
+  until [[ ${#ADMIN_PASSWORD} -ge 10 && "${ADMIN_PASSWORD:-}" =~ [A-Za-z] && "${ADMIN_PASSWORD:-}" =~ [0-9] ]]; do
+    [ -n "${ADMIN_PASSWORD:-}" ] && echo "Senha fraca: mínimo 10 caracteres, com letras e números."
     read -rsp "Senha do administrador (mín. 10, letras e números): " ADMIN_PASSWORD; echo
-    [[ ${#ADMIN_PASSWORD} -ge 10 && "$ADMIN_PASSWORD" =~ [A-Za-z] && "$ADMIN_PASSWORD" =~ [0-9] ]] && break
-    echo "Senha fraca, tente novamente."
   done
   CPUS=$(nproc); WORKER_CPUS=$(( CPUS > 2 ? CPUS - 1 : 1 ))
   cat > .env <<ENV
