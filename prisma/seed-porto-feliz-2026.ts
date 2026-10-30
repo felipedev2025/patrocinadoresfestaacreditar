@@ -18,7 +18,12 @@ async function main() {
   if (!admin) throw new Error("Execute primeiro: npm run db:seed");
 
   let event = await prisma.event.findUnique({ where: { slug: "porto-feliz-fest-show-2026" } });
-  if (!event) {
+  if (event) {
+    // Executado a cada deploy: nunca sobrescreve ajustes feitos pela equipe no painel.
+    console.log("• Evento já existe:", event.slug);
+    return;
+  }
+  {
     event = await createEvent(admin.organizationId, admin.id, {
       name: "Porto Feliz Fest Show",
       series: "porto-feliz-fest-show",
@@ -30,8 +35,6 @@ async function main() {
       venue: "CEMEX — Av. Getúlio Vargas, s/n, Bambu — Porto Feliz/SP",
     });
     console.log("✔ Evento criado:", event.slug);
-  } else {
-    console.log("• Evento já existe:", event.slug);
   }
 
   await prisma.event.update({

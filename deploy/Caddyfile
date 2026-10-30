@@ -1,0 +1,30 @@
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	# Uploads de logotipo (até 10 MB) com folga
+	request_body {
+		max_size 15MB
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+
+	reverse_proxy web:3000 {
+		# Renderizações longas não passam por aqui (rodam no worker), mas downloads de MP4 podem ser grandes
+		transport http {
+			read_timeout 10m
+			write_timeout 10m
+		}
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

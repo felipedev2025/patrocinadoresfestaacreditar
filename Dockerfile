@@ -22,6 +22,8 @@ FROM base AS runner
 ENV NODE_ENV=production
 RUN groupadd -r app && useradd -r -g app -m app
 COPY --from=build --chown=app:app /app /app
+# Diretório do volume de arquivos (logotipos e vídeos) pertencente ao usuário sem privilégios
+RUN mkdir -p /app/storage && chown app:app /app/storage
 # Chrome baixado pelo "remotion browser ensure" fica em node_modules/.remotion
 USER app
 EXPOSE 3000

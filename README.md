@@ -40,23 +40,19 @@ Acesse http://localhost:3000 e entre com `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
 
 Na primeira renderização o Remotion baixa o Chrome Headless Shell automaticamente (ou use `REMOTION_BROWSER_EXECUTABLE` para apontar um já instalado).
 
-## Produção (VPS com Docker)
+## Colocar no ar (VPS com HTTPS automático)
+
+Guia completo, incluindo a opção Vercel: [`docs/DEPLOY.md`](docs/DEPLOY.md). Resumo, numa VPS Ubuntu como root, com o DNS do domínio já apontado para ela:
 
 ```bash
-cp .env.example .env   # defina APP_URL, APP_SECRET, POSTGRES_PASSWORD, S3_*, ADMIN_*
+git clone --branch claude/intelligent-babbage-0g9735 https://github.com/felipedev2025/patrocinadoresfestaacreditar.git /opt/patrocinios
 ```
 
 ```bash
-docker compose up -d --build
+cd /opt/patrocinios && bash deploy/install.sh
 ```
 
-O compose sobe PostgreSQL, Redis, MinIO (bucket com versionamento), migrações + seed, `web` (porta 3000 em 127.0.0.1) e `worker` (limitado a 3 CPUs / 4 GB). Publique o `web` atrás de um proxy reverso com HTTPS (Caddy ou Nginx) — o Cache Storage do player de telão exige HTTPS.
-
-Mais workers para renderizar em paralelo:
-
-```bash
-docker compose up -d --scale worker=2
-```
+O script instala Docker, gera os segredos, sobe Caddy (HTTPS), site, worker, PostgreSQL e Redis, cria o evento Porto Feliz 2026 e agenda backup diário.
 
 ## Fluxo de uso
 
