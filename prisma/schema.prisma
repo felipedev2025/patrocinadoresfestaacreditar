@@ -1,0 +1,446 @@
+// Plataforma de Patrocínios e Telão Inteligente
+// Modelagem multi-tenant (Organization) e multi-evento (Event = uma edição).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ------------------------------------------------------------------
+// Enums
+// ------------------------------------------------------------------
+
+enum GlobalRole {
+  SUPER_ADMIN // Administrador geral: controla toda a organização
+  USER // Acesso definido pelos vínculos com eventos (EventMember)
+}
+
+enum EventRole {
+  ORGANIZER // Gerencia evento, patrocinadores e vídeos
+  CAPTADOR // Cadastra e acompanha os próprios patrocinadores
+  OPERATOR // Controla playlists e exibição no telão
+}
+
+enum EventStatus {
+  DRAFT
+  ACTIVE
+  FINISHED
+  ARCHIVED
+}
+
+enum SponsorshipStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  ARCHIVED
+}
+
+enum SponsorshipSource {
+  INTERNAL // cadastrado por um captador / organizador
+  PUBLIC_LINK // enviado pelo próprio patrocinador via link
+  LIBRARY // reaproveitado de edições anteriores
+}
+
+enum AssetKind {
+  SPONSOR_LOGO
+  EVENT_LOGO
+  EVENT_COVER
+}
+
+enum TemplateStyle {
+  ELEGANTE
+  FESTIVAL
+  INSTITUCIONAL
+  GRADE
+  MASTER
+}
+
+enum RenderKind {
+  COLLECTIVE // todos (ou uma seleção) dos patrocinadores aprovados
+  CATEGORY // patrocinadores de uma categoria
+  INDIVIDUAL // um patrocinador
+}
+
+enum RenderStatus {
+  QUEUED
+  RENDERING
+  COMPLETED
+  FAILED
+  CANCELED
+}
+
+// ------------------------------------------------------------------
+// Tenancy e usuários
+// ------------------------------------------------------------------
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+
+  users     User[]
+  events    Event[]
+  companies Company[]
+  templates VideoTemplate[]
+  assets    MediaAsset[]
+  auditLogs AuditLog[]
+}
+
+model User {
+  id             String     @id @default(cuid())
+  organizationId String
+  name           String
+  email          String     @unique
+  phone          String?
+  passwordHash   String
+  role           GlobalRole @default(USER)
+  active         Boolean    @default(true)
+  lastLoginAt    DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  organization         Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sessions             Session[]
+  memberships          EventMember[]
+  sponsorshipsCreated  Sponsorship[] @relation("SponsorshipCreatedBy")
+  sponsorshipsReviewed Sponsorship[] @relation("SponsorshipReviewedBy")
+  uploadLinks          UploadLink[]
+  renders              VideoRender[]
+  assets               MediaAsset[]
+  auditLogs            AuditLog[]
+
+  @@index([organizationId])
+}
+
+model Session {
+  id         String   @id @default(cuid())
+  userId     String
+  tokenHash  String   @unique // SHA-256 do token do cookie (o token em claro nunca é salvo)
+  expiresAt  DateTime
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// ------------------------------------------------------------------
+// Eventos
+// ------------------------------------------------------------------
+
+model Event {
+  id               String      @id @default(cuid())
+  organizationId   String
+  series           String // agrupa edições: "porto-fest"
+  name             String // "Porto Fest"
+  edition          String? // "12ª edição"
+  year             Int
+  slug             String      @unique // "porto-fest-2027"
+  startsAt         DateTime?
+  endsAt           DateTime?
+  venue            String?
+  status           EventStatus @default(DRAFT)
+  primaryColor     String      @default("#0B0B12")
+  secondaryColor   String      @default("#1C1C2B")
+  accentColor      String      @default("#E09B12")
+  textColor        String      @default("#FFFFFF")
+  fontFamily       String      @default("Inter")
+  headline         String      @default("AGRADECEMOS AO NOSSO PATROCINADOR")
+  thankYouMessage  String      @default("Obrigado por fazer parte desta história!")
+  logoAssetId      String?
+  coverAssetId     String?
+  screenKey        String // chave secreta do player /telao/[slug]?k=...
+  duplicatedFromId String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  logoAsset      MediaAsset?       @relation("EventLogo", fields: [logoAssetId], references: [id], onDelete: SetNull)
+  coverAsset     MediaAsset?       @relation("EventCover", fields: [coverAssetId], references: [id], onDelete: SetNull)
+  duplicatedFrom Event?            @relation("EventDuplicates", fields: [duplicatedFromId], references: [id], onDelete: SetNull)
+  duplicates     Event[]           @relation("EventDuplicates")
+  members        EventMember[]
+  categories     SponsorCategory[]
+  sponsorships   Sponsorship[]
+  formats        DisplayFormat[]
+  uploadLinks    UploadLink[]
+  renders        VideoRender[]
+  assets         MediaAsset[]      @relation("EventAssets")
+  auditLogs      AuditLog[]
+
+  @@index([organizationId, series, year])
+}
+
+model EventMember {
+  id        String    @id @default(cuid())
+  eventId   String
+  userId    String
+  role      EventRole
+  createdAt DateTime  @default(now())
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@index([userId])
+}
+
+model SponsorCategory {
+  id                  String   @id @default(cuid())
+  eventId             String
+  name                String
+  sortOrder           Int      @default(0) // ordem de exibição (menor = primeiro)
+  displaySeconds      Float    @default(4) // tempo de exposição no vídeo coletivo
+  logoScale           Float    @default(1) // destaque visual (0.4 – 1.6)
+  appearances         Int      @default(1) // quantidade de aparições por ciclo
+  animation           String   @default("fade") // fade | zoom | slide | spotlight
+  highlight           Boolean  @default(false) // tratamento "Master" (vídeo premium)
+  includeInCollective Boolean  @default(true)
+  includeIndividual   Boolean  @default(true)
+  color               String   @default("#E09B12")
+  createdAt           DateTime @default(now())
+
+  event        Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  sponsorships Sponsorship[]
+  uploadLinks  UploadLink[]
+  renders      VideoRender[]
+
+  @@unique([eventId, name])
+  @@index([eventId, sortOrder])
+}
+
+// ------------------------------------------------------------------
+// Biblioteca permanente de empresas e participação por edição
+// ------------------------------------------------------------------
+
+model Company {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  normalizedName String // minúsculas, sem acento, sem pontuação — chave de deduplicação
+  website        String?
+  contactName    String?
+  contactEmail   String?
+  contactPhone   String?
+  logoAssetId    String? // logotipo vigente (último aprovado)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  logoAsset    MediaAsset?   @relation("CompanyLogo", fields: [logoAssetId], references: [id], onDelete: SetNull)
+  sponsorships Sponsorship[]
+  assets       MediaAsset[]  @relation("CompanyAssets")
+
+  @@unique([organizationId, normalizedName])
+  @@index([organizationId, name])
+}
+
+model Sponsorship {
+  id              String            @id @default(cuid())
+  eventId         String
+  companyId       String
+  categoryId      String?
+  logoAssetId     String?
+  displayName     String // nome exibido no vídeo (pode diferir do cadastro da empresa)
+  logoScale       Float             @default(1) // ajuste fino de tamanho por patrocinador
+  status          SponsorshipStatus @default(PENDING)
+  source          SponsorshipSource @default(INTERNAL)
+  notes           String?
+  rejectionReason String?
+  createdById     String?
+  reviewedById    String?
+  reviewedAt      DateTime?
+  uploadLinkId    String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  event      Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  company    Company          @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  category   SponsorCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  logoAsset  MediaAsset?      @relation("SponsorshipLogo", fields: [logoAssetId], references: [id], onDelete: SetNull)
+  createdBy  User?            @relation("SponsorshipCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  reviewedBy User?            @relation("SponsorshipReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  uploadLink UploadLink?      @relation(fields: [uploadLinkId], references: [id], onDelete: SetNull)
+  renders    VideoRender[]
+
+  @@unique([eventId, companyId])
+  @@index([eventId, status])
+  @@index([eventId, createdById])
+  @@index([companyId])
+}
+
+// ------------------------------------------------------------------
+// Arquivos (logotipos e identidade). Original nunca é sobrescrito.
+// ------------------------------------------------------------------
+
+model MediaAsset {
+  id                String    @id @default(cuid())
+  organizationId    String
+  eventId           String? // escopo de autorização para anexar
+  companyId         String?
+  uploadLinkId      String?
+  kind              AssetKind
+  originalKey       String // backup do arquivo original (sanitizado no caso de SVG)
+  processedKey      String // PNG normalizado usado nos vídeos
+  originalName      String?
+  mimeType          String
+  sizeBytes         Int
+  width             Int
+  height            Int
+  sha256            String
+  backgroundRemoved Boolean   @default(false)
+  createdById       String?
+  createdAt         DateTime  @default(now())
+
+  organization      Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  event             Event?        @relation("EventAssets", fields: [eventId], references: [id], onDelete: SetNull)
+  company           Company?      @relation("CompanyAssets", fields: [companyId], references: [id], onDelete: SetNull)
+  uploadLink        UploadLink?   @relation(fields: [uploadLinkId], references: [id], onDelete: SetNull)
+  createdBy         User?         @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  eventLogoOf       Event[]       @relation("EventLogo")
+  eventCoverOf      Event[]       @relation("EventCover")
+  companyLogoOf     Company[]     @relation("CompanyLogo")
+  sponsorshipLogoOf Sponsorship[] @relation("SponsorshipLogo")
+
+  @@index([organizationId, createdAt])
+  @@index([eventId])
+  @@index([companyId])
+}
+
+// ------------------------------------------------------------------
+// Links de autoatendimento
+// ------------------------------------------------------------------
+
+model UploadLink {
+  id          String    @id @default(cuid())
+  eventId     String
+  tokenHash   String    @unique // SHA-256 do token; o token só é exibido uma vez
+  label       String?
+  categoryId  String? // categoria sugerida para o envio
+  createdById String?
+  expiresAt   DateTime?
+  maxUses     Int       @default(1)
+  uses        Int       @default(0)
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  event        Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  category     SponsorCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  createdBy    User?            @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  sponsorships Sponsorship[]
+  assets       MediaAsset[]
+
+  @@index([eventId])
+}
+
+// ------------------------------------------------------------------
+// Vídeo: templates, formatos de telão e renderizações
+// ------------------------------------------------------------------
+
+model VideoTemplate {
+  id             String        @id @default(cuid())
+  organizationId String? // null = template de sistema, disponível para todos
+  key            String        @unique
+  name           String
+  description    String?
+  style          TemplateStyle
+  config         Json // fontes, tempos, transições, layout (ver src/remotion/types.ts)
+  isSystem       Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  renders      VideoRender[]
+}
+
+model DisplayFormat {
+  id            String   @id @default(cuid())
+  eventId       String
+  name          String
+  width         Int
+  height        Int
+  fps           Int      @default(30)
+  safeMarginPct Float    @default(5) // margem de segurança (% do menor lado)
+  notes         String? // especificações do processador de vídeo / painel
+  isPreset      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  event   Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  renders VideoRender[]
+
+  @@unique([eventId, name])
+}
+
+model VideoRender {
+  id               String       @id @default(cuid())
+  eventId          String
+  templateId       String
+  formatId         String
+  kind             RenderKind
+  sponsorshipId    String? // INDIVIDUAL
+  categoryId       String? // CATEGORY
+  selectedIds      Json? // COLLECTIVE com seleção manual (null = todos aprovados)
+  version          Int          @default(1)
+  status           RenderStatus @default(QUEUED)
+  progress         Float        @default(0) // 0..1
+  inputProps       Json // snapshot completo usado na renderização (reprodutível)
+  contentHash      String // hash do conteúdo; diferente do atual => vídeo desatualizado
+  settings         Json // fps, crf, bitrate
+  outputKey        String?
+  thumbKey         String?
+  sizeBytes        Int?
+  durationSec      Float?
+  error            String?
+  attempts         Int          @default(0)
+  published        Boolean      @default(false) // na playlist do telão
+  publishOrder     Int          @default(0)
+  replacesRenderId String? // ao concluir, assume o lugar do vídeo anterior no telão
+  createdById      String?
+  queuedAt         DateTime     @default(now())
+  startedAt        DateTime?
+  finishedAt       DateTime?
+
+  event       Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  template    VideoTemplate    @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  format      DisplayFormat    @relation(fields: [formatId], references: [id], onDelete: Restrict)
+  sponsorship Sponsorship?     @relation(fields: [sponsorshipId], references: [id], onDelete: SetNull)
+  category    SponsorCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  createdBy   User?            @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([eventId, status])
+  @@index([eventId, published, publishOrder])
+}
+
+// ------------------------------------------------------------------
+// Auditoria
+// ------------------------------------------------------------------
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  organizationId String
+  eventId        String?
+  userId         String?
+  action         String // ex.: sponsorship.approve
+  entity         String
+  entityId       String?
+  data           Json?
+  ip             String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  event        Event?       @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([eventId, createdAt])
+  @@index([entity, entityId])
+}
