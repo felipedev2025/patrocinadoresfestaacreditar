@@ -45,6 +45,20 @@ enum SponsorshipSource {
   LIBRARY // reaproveitado de edições anteriores
 }
 
+enum SlotStatus {
+  AWAITING_LOGO // linha da lista oficial ainda sem logotipo vinculado
+  SUGGESTED // há um logotipo/patrocinador provável aguardando confirmação
+  LINKED // vinculado a um patrocínio do evento
+  IGNORED // descartado pelo organizador
+}
+
+enum ListSource {
+  CSV
+  XLSX
+  PDF
+  IMAGE
+}
+
 enum AssetKind {
   SPONSOR_LOGO
   EVENT_LOGO
@@ -89,6 +103,7 @@ model Organization {
   templates VideoTemplate[]
   assets    MediaAsset[]
   auditLogs AuditLog[]
+  aliases   CompanyAlias[]
 }
 
 model User {
@@ -104,15 +119,16 @@ model User {
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
 
-  organization         Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization         Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   sessions             Session[]
   memberships          EventMember[]
-  sponsorshipsCreated  Sponsorship[] @relation("SponsorshipCreatedBy")
-  sponsorshipsReviewed Sponsorship[] @relation("SponsorshipReviewedBy")
+  sponsorshipsCreated  Sponsorship[]  @relation("SponsorshipCreatedBy")
+  sponsorshipsReviewed Sponsorship[]  @relation("SponsorshipReviewedBy")
   uploadLinks          UploadLink[]
   renders              VideoRender[]
   assets               MediaAsset[]
   auditLogs            AuditLog[]
+  importedLists        ImportedList[]
 
   @@index([organizationId])
 }
@@ -176,6 +192,7 @@ model Event {
   renders        VideoRender[]
   assets         MediaAsset[]      @relation("EventAssets")
   auditLogs      AuditLog[]
+  importedLists  ImportedList[]
 
   @@index([organizationId, series, year])
 }
@@ -235,10 +252,11 @@ model Company {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  logoAsset    MediaAsset?   @relation("CompanyLogo", fields: [logoAssetId], references: [id], onDelete: SetNull)
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  logoAsset    MediaAsset?    @relation("CompanyLogo", fields: [logoAssetId], references: [id], onDelete: SetNull)
   sponsorships Sponsorship[]
-  assets       MediaAsset[]  @relation("CompanyAssets")
+  assets       MediaAsset[]   @relation("CompanyAssets")
+  aliases      CompanyAlias[]
 
   @@unique([organizationId, normalizedName])
   @@index([organizationId, name])
@@ -252,6 +270,7 @@ model Sponsorship {
   logoAssetId     String?
   displayName     String // nome exibido no vídeo (pode diferir do cadastro da empresa)
   logoScale       Float             @default(1) // ajuste fino de tamanho por patrocinador
+  eventOrder      Int? // ordem manual do evento (lista oficial); null = fim, em A–Z
   status          SponsorshipStatus @default(PENDING)
   source          SponsorshipSource @default(INTERNAL)
   notes           String?
@@ -271,8 +290,10 @@ model Sponsorship {
   reviewedBy User?            @relation("SponsorshipReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
   uploadLink UploadLink?      @relation(fields: [uploadLinkId], references: [id], onDelete: SetNull)
   renders    VideoRender[]
+  slots      SponsorSlot[]
 
   @@unique([eventId, companyId])
+  @@index([eventId, eventOrder])
   @@index([eventId, status])
   @@index([eventId, createdById])
   @@index([companyId])
@@ -288,6 +309,7 @@ model MediaAsset {
   eventId           String? // escopo de autorização para anexar
   companyId         String?
   uploadLinkId      String?
+  importedListId    String? // enviado pelo upload em lote da lista oficial
   kind              AssetKind
   originalKey       String // backup do arquivo original (sanitizado no caso de SVG)
   processedKey      String // PNG normalizado usado nos vídeos
@@ -310,10 +332,13 @@ model MediaAsset {
   eventCoverOf      Event[]       @relation("EventCover")
   companyLogoOf     Company[]     @relation("CompanyLogo")
   sponsorshipLogoOf Sponsorship[] @relation("SponsorshipLogo")
+  importedList      ImportedList? @relation(fields: [importedListId], references: [id], onDelete: SetNull)
+  pendingForSlots   SponsorSlot[] @relation("SlotPendingAsset")
 
   @@index([organizationId, createdAt])
   @@index([eventId])
   @@index([companyId])
+  @@index([importedListId])
 }
 
 // ------------------------------------------------------------------
@@ -443,4 +468,68 @@ model AuditLog {
   @@index([organizationId, createdAt])
   @@index([eventId, createdAt])
   @@index([entity, entityId])
+}
+
+// ------------------------------------------------------------------
+// Lista oficial do evento (importada de planilha, PDF ou foto) e conferência
+// ------------------------------------------------------------------
+
+model ImportedList {
+  id          String     @id @default(cuid())
+  eventId     String
+  name        String // rótulo exibido (ex.: "Lista oficial 03/11")
+  source      ListSource
+  fileKey     String? // arquivo original no storage (chave gerada no servidor)
+  createdById String?
+  createdAt   DateTime   @default(now())
+
+  event     Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  createdBy User?         @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  slots     SponsorSlot[]
+  assets    MediaAsset[] // logotipos enviados em lote para esta lista
+
+  @@index([eventId, createdAt])
+}
+
+model SponsorSlot {
+  id              String     @id @default(cuid())
+  listId          String
+  order           Int // posição na lista oficial
+  listName        String // nome da empresa como está na lista
+  normalizedName  String // nome normalizado para o match
+  seller          String? // vendedor / captador informado na lista
+  quotaValue      Decimal?   @db.Decimal(12, 2)
+  paymentMethod   String?
+  notes           String?
+  sponsorshipId   String? // vinculado (LINKED) ou candidato sugerido (SUGGESTED)
+  pendingAssetId  String? // logotipo enviado em lote aguardando confirmação
+  matchConfidence Float?
+  status          SlotStatus @default(AWAITING_LOGO)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  list         ImportedList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  sponsorship  Sponsorship? @relation(fields: [sponsorshipId], references: [id], onDelete: SetNull)
+  pendingAsset MediaAsset?  @relation("SlotPendingAsset", fields: [pendingAssetId], references: [id], onDelete: SetNull)
+
+  @@unique([listId, order])
+  @@index([listId, status])
+  @@index([sponsorshipId])
+  @@index([pendingAssetId])
+}
+
+/// Apelidos aprendidos (nome na lista → empresa) reaproveitados nas próximas edições.
+model CompanyAlias {
+  id              String   @id @default(cuid())
+  organizationId  String
+  normalizedAlias String
+  alias           String
+  companyId       String
+  createdAt       DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  company      Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, normalizedAlias])
+  @@index([companyId])
 }

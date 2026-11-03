@@ -16,6 +16,14 @@ describe("permissões", () => {
     expect(roleCan("USER", "OPERATOR", "screen.operate")).toBe(true);
     expect(roleCan("USER", "OPERATOR", "sponsorship.review")).toBe(false);
   });
+  it("lista oficial: organizador importa/reordena; operador só exporta; captador não acessa", () => {
+    expect(roleCan("USER", "ORGANIZER", "list.manage")).toBe(true);
+    expect(roleCan("USER", "ORGANIZER", "list.export")).toBe(true);
+    expect(roleCan("USER", "OPERATOR", "list.export")).toBe(true);
+    expect(roleCan("USER", "OPERATOR", "list.manage")).toBe(false);
+    expect(roleCan("USER", "CAPTADOR", "list.manage")).toBe(false);
+    expect(roleCan("USER", "CAPTADOR", "list.export")).toBe(false);
+  });
   it("sem vínculo com o evento não há acesso; admin geral tem tudo", () => {
     expect(roleCan("USER", null, "event.view")).toBe(false);
     expect(roleCan("SUPER_ADMIN", null, "event.manage")).toBe(true);

@@ -13,7 +13,9 @@ export type Permission =
   | "uploadLink.create"
   | "render.create"
   | "render.view"
-  | "screen.operate"; // publicar / ordenar playlist do telão
+  | "screen.operate" // publicar / ordenar playlist do telão
+  | "list.manage" // importar lista oficial, conferir logos e reordenar patrocinadores
+  | "list.export"; // baixar o Excel de conferência
 
 /** Matriz de permissões por papel no evento. SUPER_ADMIN tem todas. */
 export const ROLE_PERMISSIONS: Record<EventRole, readonly Permission[]> = {
@@ -28,9 +30,11 @@ export const ROLE_PERMISSIONS: Record<EventRole, readonly Permission[]> = {
     "render.create",
     "render.view",
     "screen.operate",
+    "list.manage",
+    "list.export",
   ],
   CAPTADOR: ["event.view", "sponsorship.create", "uploadLink.create"],
-  OPERATOR: ["event.view", "sponsorship.viewAll", "render.view", "screen.operate"],
+  OPERATOR: ["event.view", "sponsorship.viewAll", "render.view", "screen.operate", "list.export"],
 };
 
 export function roleCan(globalRole: GlobalRole, eventRole: EventRole | null, perm: Permission): boolean {

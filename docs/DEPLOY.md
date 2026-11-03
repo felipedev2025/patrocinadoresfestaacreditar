@@ -65,6 +65,30 @@ Restaurar o banco:
 cd /opt/patrocinios && docker compose exec -T postgres pg_restore -U patro -d patrocinios --clean < /var/backups/patrocinios/db-AAAAMMDD-HHMM.dump
 ```
 
+### Leitura de listas por IA (opcional)
+
+Para importar **PDF ou foto de lista manuscrita**, crie uma chave em https://console.anthropic.com (API Keys) e adicione ao `.env` da VPS:
+
+```
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+```bash
+cd /opt/patrocinios && docker compose up -d
+```
+
+Sem a chave, a importação continua funcionando com XLSX e CSV. A chave fica só no servidor.
+
+### Atualizar com migrations novas / reverter
+
+`docker compose up -d --build` aplica as migrations pendentes automaticamente (serviço `migrate`). Para reverter a migration da lista oficial (apaga listas, linhas, apelidos e a ordem manual):
+
+```bash
+cd /opt/patrocinios && docker compose exec -T postgres psql -U patro -d patrocinios -v ON_ERROR_STOP=1 < prisma/migrations/20261103130110_lista_oficial_ordem_manual/down.sql
+```
+
+Depois volte o código para a versão anterior (`git checkout <commit>`) e rode `docker compose up -d --build`.
+
 ### Armazenamento
 
 O padrão é `STORAGE_DRIVER=local`, num volume Docker compartilhado entre `web` e `worker`, com URLs assinadas e expiração. Para usar S3 / Cloudflare R2, defina no `.env`:

@@ -34,5 +34,6 @@ export const keys = {
   assetOriginal: (orgId: string, assetId: string, ext: string) => `orgs/${orgId}/assets/${assetId}/original.${ext}`,
   assetProcessed: (orgId: string, assetId: string) => `orgs/${orgId}/assets/${assetId}/processed.png`,
   renderVideo: (orgId: string, eventId: string, renderId: string) => `orgs/${orgId}/events/${eventId}/renders/${renderId}/video.mp4`,
+  listFile: (orgId: string, eventId: string, listId: string, ext: string) => `orgs/${orgId}/events/${eventId}/lists/${listId}.${ext}`,
   renderThumb: (orgId: string, eventId: string, renderId: string) => `orgs/${orgId}/events/${eventId}/renders/${renderId}/thumb.jpg`,
 };

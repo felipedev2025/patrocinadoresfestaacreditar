@@ -9,7 +9,7 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
-  serverExternalPackages: ["sharp", "jsdom", "dompurify", "bullmq", "ioredis", "@prisma/client"],
+  serverExternalPackages: ["sharp", "jsdom", "dompurify", "bullmq", "ioredis", "@prisma/client", "exceljs"],
   experimental: {
     serverActions: { bodySizeLimit: "12mb" },
   },

@@ -20,6 +20,7 @@ export async function createImageAsset(input: {
   createdById?: string | null;
   uploadLinkId?: string | null;
   companyId?: string | null;
+  importedListId?: string | null;
 }) {
   const maxBytes = env().UPLOAD_MAX_MB * 1024 * 1024;
   if (input.file.size > maxBytes) throw badRequest(`Arquivo maior que ${env().UPLOAD_MAX_MB} MB`);
@@ -40,6 +41,7 @@ export async function createImageAsset(input: {
       eventId: input.eventId,
       companyId: input.companyId ?? null,
       uploadLinkId: input.uploadLinkId ?? null,
+      importedListId: input.importedListId ?? null,
       kind: input.kind,
       originalKey,
       processedKey,

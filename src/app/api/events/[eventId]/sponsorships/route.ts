@@ -8,6 +8,7 @@ import { sponsorshipCreateSchema } from "@/lib/validation";
 import { createSponsorship } from "@/lib/services/sponsorships";
 import { storage } from "@/lib/storage";
 import { audit } from "@/lib/audit";
+import { EVENT_ORDER_BY } from "@/lib/services/ordering";
 
 type Ctx = { params: Promise<{ eventId: string }> };
 const STATUSES = ["PENDING", "APPROVED", "REJECTED", "ARCHIVED"] as const;
@@ -20,7 +21,7 @@ function csvCell(v: unknown) {
 }
 
 /**
- * Lista com filtros (?status=&categoryId=&q=&createdBy=me&sort=name|createdAt) e exportação (?format=csv).
+ * Lista com filtros (?status=&categoryId=&q=&createdBy=me&sort=name|createdAt|event) e exportação (?format=csv).
  * Captadores enxergam apenas os patrocinadores que cadastraram.
  */
 export const GET = handler(async (req: Request, { params }: Ctx) => {
@@ -36,7 +37,9 @@ export const GET = handler(async (req: Request, { params }: Ctx) => {
   const q = url.searchParams.get("q")?.trim().slice(0, 80);
   if (q) where.displayName = { contains: q, mode: "insensitive" };
   if (!access.can("sponsorship.viewAll") || url.searchParams.get("createdBy") === "me") where.createdById = user.id;
-  const sort = url.searchParams.get("sort") === "name" ? { displayName: "asc" as const } : { createdAt: "desc" as const };
+  const sortParam = url.searchParams.get("sort");
+  const sort: Prisma.SponsorshipOrderByWithRelationInput[] =
+    sortParam === "name" ? [{ displayName: "asc" }] : sortParam === "event" ? EVENT_ORDER_BY : [{ createdAt: "desc" }];
 
   const rows = await prisma.sponsorship.findMany({
     where,
@@ -52,9 +55,9 @@ export const GET = handler(async (req: Request, { params }: Ctx) => {
   });
 
   if (url.searchParams.get("format") === "csv") {
-    const header = ["Patrocinador", "Categoria", "Status", "Origem", "Captador", "Revisado por", "Contato", "E-mail", "Logotipo", "Cadastrado em"];
+    const header = ["Ordem", "Patrocinador", "Categoria", "Status", "Origem", "Captador", "Revisado por", "Contato", "E-mail", "Logotipo", "Cadastrado em"];
     const lines = rows.map((r) =>
-      [r.displayName, r.category?.name, r.status, r.source, r.createdBy?.name, r.reviewedBy?.name, r.company.contactName, r.company.contactEmail, r.logoAsset ? "sim" : "não", r.createdAt.toISOString()]
+      [r.eventOrder, r.displayName, r.category?.name, r.status, r.source, r.createdBy?.name, r.reviewedBy?.name, r.company.contactName, r.company.contactEmail, r.logoAsset ? "sim" : "não", r.createdAt.toISOString()]
         .map(csvCell)
         .join(";"),
     );

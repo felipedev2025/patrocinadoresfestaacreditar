@@ -31,6 +31,7 @@ export default async function SponsorsPage({ params, searchParams }: { params: P
         initialStatus={status ?? ""}
         canReview={access.can("sponsorship.review")}
         canDelete={access.can("sponsorship.delete")}
+        canReorder={access.can("list.manage")}
         currentUserId={user.id}
         maxMb={Number(process.env.UPLOAD_MAX_MB ?? 10)}
       />

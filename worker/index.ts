@@ -89,15 +89,21 @@ async function processRender(job: Job<RenderJobData>) {
 }
 
 async function maintenance() {
-  // Logotipos enviados há mais de 24h que nunca foram vinculados a nada
+  // Logotipos nunca vinculados a nada: 24h após o envio (7 dias para os enviados em lote
+  // na lista oficial, que aparecem como "não identificadas" até alguém encaixá-los)
   const cutoff = new Date(Date.now() - 24 * 3600_000);
+  const listCutoff = new Date(Date.now() - 7 * 24 * 3600_000);
   const orphans = await prisma.mediaAsset.findMany({
     where: {
-      createdAt: { lt: cutoff },
+      OR: [
+        { importedListId: null, createdAt: { lt: cutoff } },
+        { importedListId: { not: null }, createdAt: { lt: listCutoff } },
+      ],
       sponsorshipLogoOf: { none: {} },
       companyLogoOf: { none: {} },
       eventLogoOf: { none: {} },
       eventCoverOf: { none: {} },
+      pendingForSlots: { none: {} },
     },
     take: 500,
   });

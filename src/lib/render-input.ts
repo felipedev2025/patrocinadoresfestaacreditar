@@ -24,7 +24,8 @@ export async function loadRenderContext(eventId: string) {
     prisma.sponsorship.findMany({
       where: { eventId, status: "APPROVED", logoAssetId: { not: null } },
       include: { category: true, logoAsset: { select: { id: true, processedKey: true } } },
-      orderBy: [{ category: { sortOrder: "asc" } }, { displayName: "asc" }],
+      // Sem ordem manual (todos null) a sequência é a mesma de antes: não invalida vídeos já gerados
+      orderBy: [{ eventOrder: { sort: "asc", nulls: "last" } }, { category: { sortOrder: "asc" } }, { displayName: "asc" }],
     }),
   ]);
   return { event, sponsorships };
@@ -44,6 +45,8 @@ function toReelSponsor(s: ApprovedSponsorship, individual: boolean): ReelSponsor
     highlight: c?.highlight ?? false,
     animation: ((c?.animation ?? "fade") as SponsorAnimation),
     appearances: c?.appearances ?? 1,
+    // Só entra no snapshot quando existe: patrocinadores sem ordem mantêm o mesmo hash de antes
+    ...(s.eventOrder != null ? { eventOrder: s.eventOrder } : {}),
   };
 }
 

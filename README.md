@@ -62,7 +62,8 @@ O script instala Docker, gera os segredos, sobe Caddy (HTTPS), site, worker, Pos
 4. **Organizador** aprova em *Patrocinadores*.
 5. Em *Vídeos & Telão*: escolhe template + formato → **Gerar MP4** (fila, com barra de progresso) → baixar ou **Publicar no telão**.
 6. No computador do telão: abrir o link do player (botão *Abrir telão*), tela cheia. Novos patrocinadores aprovados marcam os vídeos como **desatualizados** → *Regenerar* (o novo vídeo substitui o antigo no telão sozinho).
-7. No ano seguinte: *Criar próxima edição* → os patrocinadores anteriores aparecem como sugestões para reconfirmação.
+7. **Lista oficial:** importe a planilha (ou PDF/foto da lista manuscrita, lida por IA), revise, grave e envie os logos em lote: cada arquivo é encaixado pelo nome. Confira "X de N com logo", confirme as sugestões e exporte o **Excel de conferência**. A ordem da lista vira a ordem do evento (também ajustável arrastando em *Patrocinadores → Ordem do evento*) e é seguida pelos vídeos.
+8. No ano seguinte: *Criar próxima edição* → os patrocinadores anteriores aparecem como sugestões para reconfirmação.
 
 ## Scripts
 

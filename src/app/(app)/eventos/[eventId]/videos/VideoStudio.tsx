@@ -103,6 +103,23 @@ export function VideoStudio(props: {
               </p>
             </div>
             <div className="flex gap-2">
+              {props.canOperate && published.length > 1 ? (
+                <button
+                  className="btn-secondary"
+                  title="Coletivos primeiro; depois os individuais na ordem do evento"
+                  onClick={async () => {
+                    setError(null);
+                    try {
+                      await api(`/api/events/${eventId}/renders/sort-playlist`, { method: "POST" });
+                      await load();
+                    } catch (e) {
+                      setError((e as Error).message);
+                    }
+                  }}
+                >
+                  Ordenar pela ordem do evento
+                </button>
+              ) : null}
               <button className="btn-secondary" onClick={() => navigator.clipboard.writeText(location.origin + props.screenPath)}>Copiar link</button>
               <a className="btn-primary" href={props.screenPath} target="_blank" rel="noopener">Abrir telão</a>
             </div>

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/client";
 import { LogoThumb, SponsorStatusBadge, EmptyState } from "@/components/ui";
 import { LogoUploader, type UploadedLogo } from "@/components/LogoUploader";
+import { DragHandle, SortableList } from "@/components/SortableList";
 import type { SponsorshipStatus } from "@prisma/client";
 
 type Row = {
@@ -12,6 +13,7 @@ type Row = {
   status: SponsorshipStatus;
   source: "INTERNAL" | "PUBLIC_LINK" | "LIBRARY";
   logoScale: number;
+  eventOrder: number | null;
   rejectionReason: string | null;
   notes: string | null;
   createdAt: string;
@@ -29,10 +31,11 @@ export function SponsorList(props: {
   initialStatus: string;
   canReview: boolean;
   canDelete: boolean;
+  canReorder: boolean;
   currentUserId: string;
   maxMb: number;
 }) {
-  const { eventId, categories, canReview, canDelete, currentUserId } = props;
+  const { eventId, categories, canReview, canDelete, canReorder, currentUserId } = props;
   const [rows, setRows] = useState<Row[] | null>(null);
   const [status, setStatus] = useState(props.initialStatus);
   const [categoryId, setCategoryId] = useState("");
@@ -40,6 +43,9 @@ export function SponsorList(props: {
   const [sort, setSort] = useState("createdAt");
   const [editing, setEditing] = useState<Row | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [savingOrder, setSavingOrder] = useState(false);
+  const filtered = !!status || !!categoryId || !!q.trim();
+  const dragEnabled = sort === "event" && canReorder && !filtered && !savingOrder;
 
   const load = useCallback(async () => {
     const qs = new URLSearchParams({ sort });
@@ -75,6 +81,23 @@ export function SponsorList(props: {
     }
   }
 
+  /** Arrastar e soltar: atualiza a tela na hora e salva a ordem completa em uma única requisição. */
+  async function saveOrder(next: Row[]) {
+    const previous = rows;
+    setRows(next.map((r, i) => ({ ...r, eventOrder: i + 1 })));
+    setSavingOrder(true);
+    setError(null);
+    try {
+      await api(`/api/events/${eventId}/sponsorships/order`, { method: "PUT", json: { orderedIds: next.map((r) => r.id) } });
+    } catch (e) {
+      setRows(previous);
+      setError((e as Error).message);
+      await load();
+    } finally {
+      setSavingOrder(false);
+    }
+  }
+
   async function remove(r: Row) {
     if (!confirm(`Excluir definitivamente "${r.displayName}" desta edição? A empresa continua na biblioteca.`)) return;
     try {
@@ -87,7 +110,7 @@ export function SponsorList(props: {
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-2 sm:grid-cols-4">
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
         <input className="input sm:col-span-2" placeholder="Buscar por nome…" value={q} onChange={(e) => setQ(e.target.value)} />
         <select className="input" value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="">Todos os status</option>
@@ -96,19 +119,28 @@ export function SponsorList(props: {
           <option value="REJECTED">Rejeitados</option>
           <option value="ARCHIVED">Arquivados</option>
         </select>
-        <div className="flex gap-2">
-          <select className="input" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-            <option value="">Todas categorias</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-          <select className="input w-auto" value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Ordenação">
-            <option value="createdAt">Recentes</option>
-            <option value="name">A–Z</option>
-          </select>
-        </div>
+        <select className="input" value={categoryId} onChange={(e) => setCategoryId(e.target.value)} aria-label="Categoria">
+          <option value="">Todas categorias</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
+        <select className="input sm:col-span-2 lg:col-span-1" value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Ordenação">
+          <option value="createdAt">Recentes</option>
+          <option value="name">A–Z</option>
+          <option value="event">Ordem do evento</option>
+        </select>
       </div>
+
+      {sort === "event" && canReorder ? (
+        <p className="rounded-lg bg-white/5 px-3 py-2 text-xs text-zinc-400">
+          {filtered
+            ? "Limpe a busca e os filtros para reordenar arrastando."
+            : savingOrder
+              ? "Salvando a nova ordem…"
+              : "Arraste pela alça ⋮⋮ para definir a ordem do evento (no celular, segure e arraste). Os vídeos gerados passam a seguir esta ordem; quem não tem ordem fica no fim, em A–Z."}
+        </p>
+      ) : null}
 
       {error ? <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</p> : null}
 
@@ -117,12 +149,19 @@ export function SponsorList(props: {
       ) : rows.length === 0 ? (
         <EmptyState title="Nenhum patrocinador encontrado" text="Ajuste os filtros ou adicione um novo patrocinador." />
       ) : (
-        <ul className="space-y-2">
-          {rows.map((r) => {
+        <SortableList
+          items={rows}
+          disabled={!dragEnabled}
+          onReorder={saveOrder}
+          renderItem={(r, handle) => {
             const own = r.createdBy?.id === currentUserId;
             return (
-              <li key={r.id} className="card flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="card flex flex-col gap-3 sm:flex-row sm:items-center">
                 <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <DragHandle handle={handle} />
+                  {sort === "event" ? (
+                    <span className="w-8 shrink-0 text-center text-sm font-semibold tabular-nums text-brand-300">{r.eventOrder ?? "—"}</span>
+                  ) : null}
                   <LogoThumb url={r.logoUrl} alt={r.displayName} size={64} />
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
@@ -156,10 +195,10 @@ export function SponsorList(props: {
                   {canReview && (r.status === "ARCHIVED" || r.status === "REJECTED") ? <button className="btn-ghost min-h-[40px] py-2" onClick={() => act(r.id, { action: "restore" })}>Reabrir</button> : null}
                   {canDelete || (own && r.status === "PENDING") ? <button className="btn-ghost min-h-[40px] py-2 text-red-300" onClick={() => remove(r)}>Excluir</button> : null}
                 </div>
-              </li>
+              </div>
             );
-          })}
-        </ul>
+          }}
+        />
       )}
 
       {editing ? (

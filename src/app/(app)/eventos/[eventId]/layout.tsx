@@ -7,6 +7,7 @@ export default async function EventLayout({ children, params }: { children: Reac
   const tabs = [
     { href: `/eventos/${eventId}`, label: "Painel", show: true },
     { href: `/eventos/${eventId}/patrocinadores`, label: "Patrocinadores", show: true },
+    { href: `/eventos/${eventId}/lista-oficial`, label: "Lista oficial", show: access.can("list.export") },
     { href: `/eventos/${eventId}/videos`, label: "Vídeos & Telão", show: access.can("render.view") },
     { href: `/eventos/${eventId}/configuracoes`, label: "Configurações", show: access.can("event.manage") || access.can("uploadLink.create") },
   ].filter((t) => t.show);

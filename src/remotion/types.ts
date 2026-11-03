@@ -37,6 +37,7 @@ export type ReelSponsor = {
   highlight: boolean;
   animation: SponsorAnimation;
   appearances: number;
+  eventOrder?: number | null; // ordem manual do evento (ausente = sem ordem: fim da fila, A–Z)
 };
 
 export type ReelEvent = {

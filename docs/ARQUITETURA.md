@@ -83,6 +83,11 @@ docs/                        Esta documentação
 | `DisplayFormat` | Resolução real de cada telão/painel, FPS, margem de segurança | único `(eventId, name)` |
 | `VideoRender` | Cada geração de vídeo: snapshot, hash, status, progresso, versão, publicação no telão | idx `(eventId,status)`, `(eventId,published,publishOrder)` |
 | `AuditLog` | Quem fez o quê, quando, com dados antes/depois | idx `(eventId, createdAt)`, `(entity, entityId)` |
+| `Sponsorship.eventOrder` | Ordem manual do evento (lista oficial / arrastar e soltar); `null` = fim, em A–Z | idx `(eventId, eventOrder)` |
+| `ImportedList` | Lista oficial importada (CSV, XLSX, PDF ou foto), com o arquivo original no storage | idx `(eventId, createdAt)` |
+| `SponsorSlot` | Linha da lista: ordem, nome como na lista, vendedor, valor da cota (`Decimal(12,2)`), forma de pgto, vínculo com o patrocínio, confiança do match, status `AWAITING_LOGO \| SUGGESTED \| LINKED \| IGNORED`, logo sugerido pendente | único `(listId, order)`; idx `(listId, status)`, `sponsorshipId`, `pendingAssetId` |
+| `CompanyAlias` | Apelido aprendido "nome na lista → empresa", reaproveitado nas próximas edições | único `(organizationId, normalizedAlias)` |
+| `MediaAsset.importedListId` | Logos enviados em lote para a lista ("Não identificadas" até serem encaixados) | idx `importedListId` |
 
 Decisões:
 
@@ -117,6 +122,16 @@ Todas as rotas mutáveis exigem sessão + verificação de `Origin` (CSRF) e pas
 | GET | `/api/telao/:slug?k=` | chave do telão | Playlist publicada |
 | GET | `/api/files/*` | URL assinada | Entrega do driver local (com Range) |
 | GET/POST/PATCH | `/api/users`, `/api/users/:id` | admin | Usuários |
+| PUT | `/api/events/:id/sponsorships/order` | list.manage | Ordem manual completa (1 SELECT + 1 UPDATE em lote, 409 se a lista mudou) |
+| GET | `/api/events/:id/sponsorships?sort=event` | event.view | Listagem na ordem do evento |
+| POST | `/api/events/:id/renders/sort-playlist` | screen.operate | Playlist do telão na ordem do evento |
+| POST | `/api/events/:id/lists/parse` | list.manage | Lê CSV/XLSX (direto) ou PDF/foto (IA) e devolve as linhas para revisão — **não grava** |
+| GET/POST | `/api/events/:id/lists` | list.export / list.manage | Listas do evento / grava a lista revisada e cruza com os cadastrados |
+| GET/DELETE | `/api/lists/:listId` | list.export / list.manage | Conferência (contadores, linhas, só no painel, não identificadas) / excluir |
+| POST | `/api/lists/:listId/logos` | list.manage | Upload em lote (1 arquivo por requisição) com encaixe automático; `ocr=true` lê o nome no logo |
+| POST | `/api/lists/:listId/approve-linked` | list.manage + review | Aprova os vinculados pendentes que têm logo |
+| GET | `/api/lists/:listId/export` | list.export | Excel de conferência (.xlsx em streaming) |
+| PATCH | `/api/slots/:slotId` | list.manage | confirm, reject, ignore, restore, link, unlink, attach, edit |
 
 ## 5. Perfis e permissões
 
@@ -130,6 +145,8 @@ Todas as rotas mutáveis exigem sessão + verificação de `Origin` (CSRF) e pas
 | Gerar vídeos | ✔ | ✔ | | |
 | Publicar / ordenar telão | ✔ | ✔ | | ✔ |
 | Criar eventos / usuários | ✔ | | | |
+| Importar lista oficial, encaixar logos, reordenar | ✔ | ✔ | | |
+| Exportar Excel de conferência | ✔ | ✔ | | ✔ |
 
 Isolamento: toda consulta de evento filtra por `organizationId` **e** por vínculo `EventMember`; um usuário sem vínculo recebe 404 (não revela a existência do evento). Assets só podem ser anexados ao mesmo evento e, para captadores, apenas os enviados por eles mesmos (proteção contra IDOR).
 
@@ -143,6 +160,18 @@ Isolamento: toda consulta de evento filtra por `organizationId` **e** por víncu
 
 Layout responsivo ao painel: tudo é calculado a partir de `width × height` e da margem de segurança; logotipos ficam dentro de caixas com `object-fit: contain` (nunca cortados ou deformados); em ultrawide o logotipo é limitado pela altura; a grade escolhe colunas × linhas que maximizam a célula.
 
+## 6.1 Lista oficial e match de nomes
+
+1. **Leitura** (`/lists/parse`): tipo detectado por magic bytes. CSV (UTF-8 ou Windows-1252, `;`/`,`/tab) e XLSX (exceljs, valor calculado das fórmulas) são lidos direto. PDF e foto vão ao Claude (`claude-opus-5-5`, visão, *structured outputs* com schema zod, revalidado no servidor). Nada é gravado nesta etapa.
+2. **Revisão obrigatória** na tela (o manuscrito pode ser lido errado) → `/lists` grava a lista e os slots.
+3. **Match** (`src/lib/matching.ts`, em memória): normalização (minúsculas, sem acento, sem extensão, sem `-_.&/`, sem ltda/me/s.a./logo…) e o maior entre três sinais:
+   - nome inteiro sem espaços: Levenshtein e trigramas (Dice);
+   - alinhamento palavra a palavra × cobertura (nome parcial nunca passa de 0,84);
+   - todas as palavras do nome curto contidas no longo (0,82 → sempre pede confirmação).
+   Decisão: **≥ 0,85 e 0,10 acima do 2º → vincula**; **0,60–0,85 ou empate → sugere**; **< 0,60 → não identificada**. A atribuição é gulosa pelos maiores scores, sem repetir patrocinador. Os candidatos incluem os nomes da empresa e os apelidos aprendidos.
+4. **Encaixe do logo**: atualiza o patrocínio vinculado ou cria um novo (**PENDENTE**, ordem = linha da lista) e grava o apelido. Desvincular apaga o apelido daquele par.
+5. **Conferência**: "X de N com logo", o que falta, sugeridos, "só no painel" e "Não identificadas" (arrastar até a linha ou menu "Encaixar em…").
+
 ## 7. Segurança
 
 - Senhas bcrypt (custo 12); sessão opaca com hash no banco; cookie `httpOnly`, `SameSite=Lax`, `Secure` em produção; logout/desativação/troca de senha encerram sessões.
@@ -153,6 +182,7 @@ Layout responsivo ao painel: tudo é calculado a partir de `width × height` e d
 - Links públicos: token de 192 bits, armazenado como hash, expiração, limite de uso com reserva atômica, revogação; materiais externos **sempre** pendentes.
 - CSV exportado com neutralização de fórmulas (CSV injection).
 - Auditoria de todas as alterações (antes/depois).
+- Lista oficial: o evento é sempre resolvido no servidor a partir da lista/linha (nunca vem do cliente); upload em lote reaproveita o pipeline de imagem (magic bytes, sharp, EXIF removido, nome gerado no servidor — o nome original só serve de texto para o match); IA com rate limit (10/h por usuário, 30/dia por evento, 60/h para leitura de logos), chave só no servidor, conteúdo dos arquivos nunca registrado em log, texto da IA tratado como dado (React escapa; nada de `dangerouslySetInnerHTML`); Excel com textos que começam com `= + - @` prefixados.
 
 ## 8. Plano de implementação
 

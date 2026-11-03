@@ -11,6 +11,22 @@ export type Scene =
 const sec = (s: number, fps: number) => Math.max(1, Math.round(s * fps));
 
 /** Agrupa por categoria respeitando a ordem configurada (menor sortOrder primeiro). */
+const byEventOrder = (a: ReelSponsor, b: ReelSponsor) => (a.eventOrder ?? Infinity) - (b.eventOrder ?? Infinity);
+
+/**
+ * Ordenação dos patrocinadores no vídeo. Quem não tem ordem manual vai para o fim, em A–Z.
+ * Sem nenhuma ordem manual, o resultado é idêntico ao comportamento anterior (categoria, depois nome).
+ */
+export function sortSponsors(sponsors: ReelSponsor[], layout: ReelProps["config"]["layout"]): ReelSponsor[] {
+  const byName = (a: ReelSponsor, b: ReelSponsor) => a.name.localeCompare(b.name, "pt-BR");
+  const byCategory = (a: ReelSponsor, b: ReelSponsor) => a.categoryOrder - b.categoryOrder;
+  return [...sponsors].sort((a, b) =>
+    layout === "sequential"
+      ? byEventOrder(a, b) || byCategory(a, b) || byName(a, b)
+      : byCategory(a, b) || byEventOrder(a, b) || byName(a, b),
+  );
+}
+
 export function groupByCategory(sponsors: ReelSponsor[]) {
   const groups = new Map<string, { title: string; color: string; order: number; items: ReelSponsor[] }>();
   for (const s of sponsors) {
@@ -39,8 +55,13 @@ export function buildScenes(props: ReelProps): Scene[] {
 
   if (cfg.introSeconds > 0) scenes.push({ type: "intro", frames: sec(cfg.introSeconds, fps) });
 
-  const ordered = [...props.sponsors].sort((a, b) => a.categoryOrder - b.categoryOrder);
-  const groups = groupByCategory(ordered);
+  const ordered = sortSponsors(props.sponsors, cfg.layout);
+  // Sequencial: a ordem manual do evento manda (sem agrupar por categoria).
+  // Por categoria / grade: categorias na ordem configurada e, dentro de cada uma, a ordem do evento.
+  const groups =
+    cfg.layout === "sequential"
+      ? [{ title: "Patrocinadores", color: props.event.accent, order: 0, items: ordered }]
+      : groupByCategory(ordered);
 
   for (const g of groups) {
     // Categorias de destaque (Master) sempre aparecem individualmente, mesmo no layout em grade.
