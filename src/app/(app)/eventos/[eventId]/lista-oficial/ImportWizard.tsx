@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/client";
 
 type Row = { key: string; order: number; company: string; seller: string; quotaValue: string; paymentMethod: string; notes: string };
@@ -15,7 +15,19 @@ const newKey = () => `r${++seq}`;
  * (2) revisão editável — obrigatória, porque listas manuscritas podem ser lidas errado — e gravação.
  * Todo texto lido é exibido como texto (React escapa); nada é interpretado como HTML.
  */
-export function ImportWizard({ eventId, maxMb, aiEnabled, onDone }: { eventId: string; maxMb: number; aiEnabled: boolean; onDone: (listId: string) => void }) {
+export function ImportWizard({
+  eventId,
+  maxMb,
+  aiEnabled,
+  onDone,
+  onActiveChange,
+}: {
+  eventId: string;
+  maxMb: number;
+  aiEnabled: boolean;
+  onDone: (listId: string) => void;
+  onActiveChange?: (active: boolean) => void;
+}) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [source, setSource] = useState<ParseResponse["source"] | null>(null);
@@ -24,6 +36,11 @@ export function ImportWizard({ eventId, maxMb, aiEnabled, onDone }: { eventId: s
   const [name, setName] = useState(`Lista oficial ${new Date().toLocaleDateString("pt-BR")}`);
   const [busy, setBusy] = useState<"reading" | "saving" | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Informa ao painel se há importação em andamento (arquivo escolhido ou revisão aberta)
+  useEffect(() => {
+    onActiveChange?.(!!file || !!rows);
+  }, [file, rows, onActiveChange]);
 
   async function read(f: File) {
     if (f.size > maxMb * 1048576) {
