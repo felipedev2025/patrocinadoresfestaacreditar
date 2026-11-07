@@ -4,7 +4,7 @@ import { badRequest, notFound } from "../http";
 import { enqueueRender } from "../queue";
 import { buildReelProps, contentHash, loadRenderContext, type RenderSpec } from "../render-input";
 
-export type RenderSettings = { crf: number | null; videoBitrate: string | null };
+export type RenderSettings = { crf: number | null; videoBitrate: string | null; showSponsorNames?: boolean };
 
 /** Cria o registro do render com snapshot completo e enfileira para o worker. */
 export async function createRender(opts: {
@@ -27,7 +27,7 @@ export async function createRender(opts: {
   if (opts.spec.kind === "INDIVIDUAL" && !opts.spec.sponsorshipId) throw badRequest("Selecione o patrocinador");
   if (opts.spec.kind === "CATEGORY" && !opts.spec.categoryId) throw badRequest("Selecione a categoria");
 
-  const props = buildReelProps(opts.spec, ctx.event, template, format, ctx.sponsorships);
+  const props = buildReelProps(opts.spec, ctx.event, template, format, ctx.sponsorships, opts.settings);
   if (props.sponsors.length === 0) {
     throw badRequest("Nenhum patrocinador aprovado (com logotipo) atende a este vídeo");
   }
@@ -91,7 +91,7 @@ export async function computeOutdated(eventId: string, renders: VideoRender[]) {
       categoryId: r.categoryId,
       selectedIds: (r.selectedIds as string[] | null) ?? null,
     };
-    const props = buildReelProps(spec, ctx.event, t, f, ctx.sponsorships);
+    const props = buildReelProps(spec, ctx.event, t, f, ctx.sponsorships, r.settings as RenderSettings);
     if (contentHash(props, r.settings) !== r.contentHash) outdated.add(r.id);
   }
   return outdated;

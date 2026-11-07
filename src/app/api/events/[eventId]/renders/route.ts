@@ -65,7 +65,7 @@ export const POST = handler(async (req: Request, { params }: Ctx) => {
   const { eventId } = await params;
   const access = await eventAccess(user, eventId, "render.create");
   const body = renderCreateSchema.parse(await req.json());
-  const settings = { crf: body.videoBitrate ? null : (body.crf ?? 18), videoBitrate: body.videoBitrate ?? null };
+  const settings = { crf: body.videoBitrate ? null : (body.crf ?? 18), videoBitrate: body.videoBitrate ?? null, showSponsorNames: body.showSponsorNames };
 
   const created: string[] = [];
   if (body.kind === "INDIVIDUAL" && body.allIndividuals) {

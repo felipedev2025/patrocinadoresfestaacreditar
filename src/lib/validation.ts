@@ -130,4 +130,5 @@ export const renderCreateSchema = z.object({
   allIndividuals: z.boolean().default(false), // gera um vídeo individual para cada aprovado
   crf: z.number().int().min(10).max(35).nullish(),
   videoBitrate: z.string().regex(/^\d{1,3}(\.\d)?M$/, "Use o formato 8M, 12M…").nullish(),
+  showSponsorNames: z.boolean().default(false), // nome escrito embaixo do logotipo no vídeo
 });

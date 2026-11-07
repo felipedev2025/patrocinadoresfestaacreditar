@@ -233,6 +233,7 @@ function CreateRender(props: {
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [quality, setQuality] = useState("crf:18");
+  const [showNames, setShowNames] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -253,6 +254,7 @@ function CreateRender(props: {
           selectedIds: kind === "COLLECTIVE" && selectMode ? [...selected] : null,
           crf: mode === "crf" ? Number(value) : null,
           videoBitrate: mode === "br" ? value : null,
+          showSponsorNames: showNames,
         },
       });
       setMsg({ ok: true, text: `${r.renderIds.length} vídeo(s) enviado(s) para a fila de renderização.` });
@@ -326,6 +328,10 @@ function CreateRender(props: {
           </select>
         </div>
       </div>
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" className="h-5 w-5 accent-amber-400" checked={showNames} onChange={(e) => setShowNames(e.target.checked)} />
+        Mostrar o nome do patrocinador embaixo do logo (desmarcado: só as imagens)
+      </label>
       {kind === "COLLECTIVE" ? (
         <div>
           <label className="flex items-center gap-2 text-sm">

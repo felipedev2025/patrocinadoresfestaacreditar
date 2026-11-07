@@ -72,10 +72,14 @@ export function buildReelProps(
   template: VideoTemplate,
   format: DisplayFormat,
   approved: ApprovedSponsorship[],
+  overrides?: { showSponsorNames?: boolean } | null,
 ): ReelProps {
   const chosen = selectSponsors(spec, approved);
   const individual = spec.kind === "INDIVIDUAL";
-  const config: TemplateConfig = normalizeConfig(template.config as Partial<TemplateConfig>);
+  const base: TemplateConfig = normalizeConfig(template.config as Partial<TemplateConfig>);
+  // Ajuste escolhido na hora de gerar o vídeo; vídeos antigos (sem o campo) seguem o template
+  const config: TemplateConfig =
+    typeof overrides?.showSponsorNames === "boolean" ? { ...base, showSponsorNames: overrides.showSponsorNames } : base;
   return {
     mode: individual ? "individual" : "collective",
     style: template.style,
