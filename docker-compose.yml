@@ -1,0 +1,79 @@
+# Produção em VPS única com HTTPS automático (Caddy + Let's Encrypt).
+# Instalação guiada: sudo bash deploy/install.sh   |   Manual: docs/DEPLOY.md
+services:
+  caddy:
+    image: caddy:2.8.4-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443", "443:443/udp"]
+    environment:
+      DOMAIN: ${DOMAIN:?defina DOMAIN no .env}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+    depends_on: [web]
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: patro
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+      POSTGRES_DB: patrocinios
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U patro"], interval: 5s, retries: 30 }
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    volumes: [redisdata:/data]
+    healthcheck: { test: ["CMD", "redis-cli", "ping"], interval: 5s, retries: 30 }
+
+  migrate:
+    build: .
+    image: patrocinios-app
+    env_file: .env
+    environment: &appenv
+      DATABASE_URL: postgresql://patro:${POSTGRES_PASSWORD}@postgres:5432/patrocinios?schema=public
+      REDIS_URL: redis://redis:6379
+      NODE_ENV: production
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-local}
+      STORAGE_LOCAL_DIR: /app/storage
+    command: sh -c "npx prisma migrate deploy && npx tsx prisma/seed.ts && npx tsx prisma/seed-porto-feliz-2026.ts"
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  web:
+    image: patrocinios-app
+    restart: unless-stopped
+    env_file: .env
+    environment: *appenv
+    volumes: [storage:/app/storage]
+    expose: ["3000"] # acessível apenas pelo Caddy
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+
+  worker:
+    image: patrocinios-app
+    restart: unless-stopped
+    env_file: .env
+    environment: *appenv
+    volumes: [storage:/app/storage] # mesmo volume do web: o MP4 gerado fica disponível imediatamente
+    command: ["npx", "tsx", "worker/index.ts"]
+    shm_size: 1gb # o Chrome do Remotion precisa de /dev/shm maior
+    deploy:
+      resources:
+        limits: { cpus: "${WORKER_CPUS:-3}", memory: "${WORKER_MEMORY:-4g}" } # protege o site durante renderizações
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+
+volumes:
+  caddydata:
+  caddyconfig:
+  pgdata:
+  redisdata:
+  storage:

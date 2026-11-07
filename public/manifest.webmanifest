@@ -1,0 +1,10 @@
+{
+  "name": "Patrocínios & Telão",
+  "short_name": "Patrocínios",
+  "start_url": "/eventos",
+  "display": "standalone",
+  "background_color": "#09090f",
+  "theme_color": "#09090f",
+  "lang": "pt-BR",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
