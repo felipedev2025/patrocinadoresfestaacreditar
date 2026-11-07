@@ -193,7 +193,9 @@ const LogoBox: React.FC<{
   theme: Theme;
   glow?: boolean;
 }> = ({ src, w, h, plate, theme, glow }) => {
-  const pad = plate ? Math.min(w, h) * 0.1 : 0;
+  // O logo preenche a área interna da placa (width/height 100% + contain): arquivos pequenos
+  // são ampliados até caber, em vez de ficarem no tamanho natural no meio da placa.
+  const pad = plate ? Math.min(w, h) * 0.07 : 0;
   return (
     <div
       style={{
@@ -213,7 +215,7 @@ const LogoBox: React.FC<{
         boxSizing: "border-box",
       }}
     >
-      <Img src={src} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+      <Img src={src} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
     </div>
   );
 };
@@ -254,7 +256,7 @@ const IntroScene: React.FC<{ props: ReelProps; theme: Theme; frames: number }> =
     <AbsoluteFill style={{ opacity, alignItems: "center", justifyContent: "center", padding: sa.margin, gap: sa.base * 0.03, flexDirection: "column" }}>
       {props.event.logo ? (
         <div style={{ transform: `scale(${0.7 + pop * 0.3})`, width: sa.innerW * 0.6, height: logoH, display: "flex", justifyContent: "center" }}>
-          <Img src={props.event.logo} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+          <Img src={props.event.logo} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
         </div>
       ) : (
         <Title size={sa.base * 0.1} theme={theme} weight={props.config.titleWeight}>
@@ -497,7 +499,7 @@ const OutroScene: React.FC<{ props: ReelProps; theme: Theme; frames: number }> =
       </div>
       {props.event.logo ? (
         <div style={{ height: sa.innerH * 0.22, width: sa.innerW * 0.4, display: "flex", justifyContent: "center", marginTop: sa.base * 0.02 }}>
-          <Img src={props.event.logo} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+          <Img src={props.event.logo} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
         </div>
       ) : (
         <Title size={sa.base * 0.04} theme={theme} color={theme.accent} weight={700}>

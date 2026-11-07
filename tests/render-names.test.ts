@@ -18,7 +18,7 @@ describe("nome do patrocinador embaixo do logo", () => {
     expect(buildReelProps(spec, event, template, format, approved, { showSponsorNames: true }).config.showSponsorNames).toBe(true);
   });
   it("vídeos antigos (sem a opção salva) seguem o template e mantêm o mesmo hash", () => {
-    const oldSettings = { crf: 18, videoBitrate: null };
+    const oldSettings: { crf: number; videoBitrate: null; showSponsorNames?: boolean } = { crf: 18, videoBitrate: null };
     const before = buildReelProps(spec, event, template, format, approved);
     const after = buildReelProps(spec, event, template, format, approved, oldSettings);
     expect(after.config.showSponsorNames).toBe(true);
